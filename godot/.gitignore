@@ -1,0 +1,16 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# Export output (point your export presets here)
+/build/
+
+# Blender / Krita / editor autosaves and backups
+*.blend1
+*.blend2
+*.kra~
+*~
+
+# OS clutter
+.DS_Store
+Thumbs.db

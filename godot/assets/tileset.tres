@@ -343,6 +343,12 @@ texture = ExtResource("2_beawo")
 10:10/0 = 0
 11:10/0 = 0
 
+[sub_resource type="NavigationPolygon" id="NavigationPolygon_80oah"]
+vertices = PackedVector2Array(8, 8, -8, 8, -8, -8, 8, -8)
+polygons = Array[PackedInt32Array]([PackedInt32Array(0, 1, 2, 3)])
+outlines = Array[PackedVector2Array]([PackedVector2Array(-8, -8, 8, -8, 8, 8, -8, 8)])
+agent_radius = 0.0
+
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_g8n3q"]
 texture = ExtResource("3_fk0lh")
 0:0/0 = 0
@@ -358,8 +364,10 @@ texture = ExtResource("3_fk0lh")
 2:0/0/terrains_peering_bit/top_left_corner = 0
 2:0/0/terrains_peering_bit/top_side = 0
 2:0/0/terrains_peering_bit/top_right_corner = 0
+2:0/0/navigation_layer_0/polygon = SubResource("NavigationPolygon_80oah")
 3:0/0 = 0
 3:0/0/terrain_set = 0
+3:0/0/physics_layer_0/polygon_0/points = PackedVector2Array(-8, -8, 8, -8, 8, 8, -8, 8)
 4:0/animation_frame_0/duration = 1.0
 4:0/animation_frame_1/duration = 1.0
 4:0/0 = 0
@@ -470,7 +478,6 @@ texture = ExtResource("3_fk0lh")
 11:5/0 = 0
 0:6/0 = 0
 1:6/0 = 0
-1:6/0/custom_data_0 = true
 2:6/0 = 0
 3:6/0 = 0
 4:6/0 = 0
@@ -939,11 +946,11 @@ texture = ExtResource("6_qscaq")
 11:10/0 = 0
 
 [resource]
+physics_layer_0/collision_layer = 1
 terrain_set_0/mode = 0
 terrain_set_0/terrain_0/name = "floor"
 terrain_set_0/terrain_0/color = Color(0.5, 0.34375, 0.25, 1)
-custom_data_layer_0/name = "solid"
-custom_data_layer_0/type = 1
+navigation_layer_0/layers = 1
 sources/0 = SubResource("TileSetAtlasSource_lgcvb")
 sources/1 = SubResource("TileSetAtlasSource_ol6ym")
 sources/2 = SubResource("TileSetAtlasSource_g8n3q")

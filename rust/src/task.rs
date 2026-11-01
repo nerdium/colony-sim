@@ -1,132 +1,141 @@
-use std::{any::Any, cell::RefCell, rc::Rc};
+use std::{any::{Any, TypeId}, cell::RefCell, collections::HashMap, rc::Rc};
 use godot::prelude::*;
-
-pub type ActionData = Box<dyn Any>;
-pub type ActionResult = Result<ActionData, String>;
-pub type ActionInbox = Rc<RefCell<Option<ActionResult>>>;
-
-pub trait ActionResultExt {
-    fn data<T: 'static>(&self) -> Option<&T>;
-    fn into_data<T: 'static>(self) -> Option<T>;
-}
-
-impl ActionResultExt for ActionResult {
-    fn data<T: 'static>(&self) -> Option<&T> {
-        self.as_ref().ok()?.downcast_ref::<T>()
-    }
-
-    fn into_data<T: 'static>(self) -> Option<T> {
-        self.ok()?.downcast::<T>().ok().map(|b| *b)
-    }
-}
-
-pub trait Action {
-    fn start(self: Box<Self>, host: Gd<Node>, done: Completion);
-}
 
 pub trait Task {
     fn next(&mut self, prev: Option<ActionResult>) -> Option<Box<dyn Action>>;
 }
 
-pub struct Completion {
-    pub runner: Gd<TaskRunner>,
-    pub inbox: ActionInbox,
-    sent: bool
+pub trait Action {
+    fn start(self: Box<Self>, ctx: &mut ActionContext, result: ActionCallback);
 }
 
-impl Completion {
-    pub fn new(runner: Gd<TaskRunner>, inbox: ActionInbox) -> Self {
-        Self { runner, inbox, sent: false }
+pub type ActionData = Box<dyn Any>;
+pub type ActionResult = Result<ActionData, String>;
+
+pub struct ActionContext {
+    pub host: Gd<Node>,
+    pub caps: Capabilities
+}
+
+#[derive(Clone)]
+pub struct ActionCallback {
+    inbox: Rc<RefCell<Option<ActionResult>>>
+}
+
+impl ActionCallback {
+    pub fn new() -> Self {
+        Self { inbox: Rc::new(RefCell::new(None)) }
     }
 
-    pub fn finish(&mut self, result: ActionResult) {
-        self.sent = true;
-        if !self.runner.is_instance_valid() {
-            return; // runner was freed while action was in flight
-        }
-
+    pub fn success(self) {
+        let result: ActionResult = Ok(Box::new(()));
         *self.inbox.borrow_mut() = Some(result);
-        self.runner.call_deferred("advance_task", &[]);
     }
 
-    pub fn success(mut self) {
-        self.finish(Ok(Box::new(())));
+    pub fn success_with<T: Any>(self, data: T) {
+        let result: ActionResult = Ok(Box::new(data));
+        *self.inbox.borrow_mut() = Some(result);
     }
 
-    pub fn success_with<T: Any>(mut self, data: T) {
-        self.finish(Ok(Box::new(data)));
+    pub fn failure(self, reason: impl Into<String>) {
+        let result: ActionResult = Err(reason.into());
+        *self.inbox.borrow_mut() = Some(result);
     }
 
-    pub fn failed(mut self, reason: impl Into<String>) {
-        self.finish(Err(reason.into()));
+    pub fn take(&mut self) -> Option<ActionResult> {
+        self.inbox.borrow_mut().take()
     }
 }
 
-impl Drop for Completion {
-    fn drop(&mut self) {
-        if !self.sent {
-            self.finish(Err("action dropped before completion was sent".into()));
+pub trait Capability {
+
+}
+
+#[derive(Default)]
+pub struct Capabilities {
+    map: HashMap<TypeId, Box<dyn Any>>
+}
+
+impl Capabilities {
+    pub fn insert<C: Any>(&mut self, cap: C) {
+        self.map.insert(TypeId::of::<C>(), Box::new(cap));
+    }
+
+    pub fn get<C: Any>(&self) -> Option<&C> {
+        self.map
+            .get(&TypeId::of::<C>())
+            .and_then(|b| b.downcast_ref::<C>())
+    }
+
+    pub fn get_mut<C: Any>(&mut self) -> Option<&mut C> {
+        self.map
+            .get_mut(&TypeId::of::<C>())
+            .and_then(|b| b.downcast_mut::<C>())
+    }
+}
+
+pub trait CapabilityProvider {
+    fn provide(&self, caps: &mut Capabilities);
+}
+
+pub struct TaskRunner {
+    task: Option<Box<dyn Task>>,
+    callback: ActionCallback,
+    cap_provider: Box<dyn CapabilityProvider>
+}
+
+impl TaskRunner {
+    pub fn new<C: CapabilityProvider + 'static>(cap_provider: C) -> Self {
+        Self {
+            task: None,
+            callback: ActionCallback::new(),
+            cap_provider: Box::new(cap_provider)
         }
     }
-}
 
-#[derive(GodotClass)]
-#[class(base = Node, init)]
-pub struct TaskRunner {
-    base: Base<Node>,
-
-    #[export] host: Option<Gd<Node>>,
-
-    task: Option<Box<dyn Task>>,
-    inbox: ActionInbox
-}
-
-#[godot_api]
-impl TaskRunner {
-    #[signal]
-    fn task_finished();
-
-    pub fn start_task(&mut self, task: Box<dyn Task>) -> bool {
+    // TODO: probably shouldn't take host param, start action in poll
+    pub fn assign_task(&mut self, mut task: Box<dyn Task>, host: Gd<Node>) {
         if self.is_busy() {
             godot_warn!("task runner is busy; task not started");
-            return false;
+            return;
         }
 
-        self.task = Some(task);
-        self.base_mut().call_deferred("advance_task", &[]);
-        true
+        if let Some(first_action) = task.next(None) {
+            self.task = Some(task);
+            self.start_action(first_action, host);
+        }
+    }
+
+    pub fn poll(&mut self, host: Gd<Node>) {
+        // check for active task
+        if let Some(task) = &mut self.task {
+            // check if action has completed
+            if let Some(action_result) = self.callback.take() {
+                
+                // fetch the next action from the task
+                let Some(next_action) = task.next(Some(action_result)) else {
+                    
+                    // if no next action, then task is complete
+                    self.task = None;
+                    return;
+                };
+
+                self.start_action(next_action, host);
+            }
+        }
     }
 
     pub fn is_busy(&self) -> bool {
         self.task.is_some()
     }
 
-    #[func]
-    fn advance_task(&mut self) {
-        let Some(task) = self.task.as_mut() else { return } ;
+    pub fn start_action(&mut self, action: Box<dyn Action>, host: Gd<Node>) {
+        // TODO: can we pull capabilities on new task instead?
+        // build context
+        let mut caps = Capabilities::default();
+        self.cap_provider.provide(&mut caps);
+        let mut context = ActionContext { host, caps };
 
-        let Some(next_action) = task.next(self.inbox.borrow_mut().take()) else {
-            self.finish_task();
-            return;
-        };
-
-        let Some(runner_host) = self.resolve_host() else {
-            godot_error!("task runner has no host");
-            self.finish_task();
-            return;
-        };
-
-        let completion_handle = Completion::new(self.to_gd(), self.inbox.clone());
-
-        next_action.start(runner_host, completion_handle);
-    }
-
-    fn finish_task(&mut self) {
-        self.task = None;
-        self.base_mut().call_deferred("emit_signal", &["task_finished".to_variant()]);
-    }
-
-    fn resolve_host(&self) -> Option<Gd<Node>> {
-        self.host.clone().or_else(|| self.base().get_parent())
+        action.start(&mut context, self.callback.clone());
     }
 }

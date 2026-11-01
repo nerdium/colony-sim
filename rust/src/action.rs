@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use godot::prelude::*;
 
-use crate::task::{Action, ActionResult, Completion, Task};
+use crate::task::{Action, ActionCallback, ActionContext, ActionResult, Task};
 
 pub struct ActionQueue {
     queue: VecDeque<Box<dyn Action>>
@@ -16,6 +16,7 @@ impl ActionQueue {
 
 impl Task for ActionQueue {
     fn next(&mut self, prev: Option<ActionResult>) -> Option<Box<dyn Action>> {
+        godot_print!("next task please");
         match prev {
             Some(Err(err)) => godot_error!("ActionQueue failed: {}", err),
             _ => {}
@@ -25,17 +26,17 @@ impl Task for ActionQueue {
     }
 }
 
-pub struct Wait {
+pub struct WaitAction {
     pub seconds: f64
 }
 
-impl Action for Wait {
-    fn start(self: Box<Self>, host: Gd<Node>, done: Completion) {
-        let timer = host.get_tree().create_timer(self.seconds);
+impl Action for WaitAction {
+    fn start(self: Box<Self>, ctx: &mut ActionContext, result: ActionCallback) {
+        let timer = ctx.host.get_tree().create_timer(self.seconds);
         godot::task::spawn(async move {
             timer.signals().timeout().to_future().await;
             godot_print!("waited for {} seconds", self.seconds);
-            done.success();
+            result.success();
         });
     }
 }

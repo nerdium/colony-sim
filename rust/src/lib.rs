@@ -5,6 +5,7 @@ pub mod camera;
 pub mod nav;
 pub mod npc;
 pub mod task;
+pub mod world;
 
 struct MyExtension;
 

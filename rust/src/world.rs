@@ -27,9 +27,11 @@ impl INavigationRegion2D for World {
 
         let storage_tile = Vector2i::new(0, 0);
         let storage_pos = self.tile_to_world_pos(storage_tile);
-        self.storage_controller.bind_mut().add_storage(storage_pos, 8);
+        self.storage_controller.bind_mut().add_storage(storage_tile, storage_pos, 8);
 
-        godot_print!("{:?}", self.storage_controller.bind().find_with_space());
+        let storage_tile = Vector2i::new(0, 20);
+        let storage_pos = self.tile_to_world_pos(storage_tile);
+        self.storage_controller.bind_mut().add_storage(storage_tile, storage_pos, 1);
     }
 
     fn process(&mut self, _dr: f64) {

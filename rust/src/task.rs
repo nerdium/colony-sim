@@ -12,9 +12,9 @@ pub trait Action {
 pub type ActionData = Box<dyn Any>;
 pub type ActionResult = Result<ActionData, String>;
 
-pub struct ActionContext {
+pub struct ActionContext<'a> {
     pub host: Gd<Node>,
-    pub caps: Capabilities
+    pub caps: &'a mut Capabilities
 }
 
 #[derive(Clone)]
@@ -74,22 +74,18 @@ impl Capabilities {
     }
 }
 
-pub trait CapabilityProvider {
-    fn provide(&self, caps: &mut Capabilities);
-}
-
 pub struct TaskRunner {
     task: Option<Box<dyn Task>>,
     callback: ActionCallback,
-    cap_provider: Box<dyn CapabilityProvider>
+    capabilities: Capabilities
 }
 
 impl TaskRunner {
-    pub fn new<C: CapabilityProvider + 'static>(cap_provider: C) -> Self {
+    pub fn new(capabilities: Capabilities) -> Self {
         Self {
             task: None,
             callback: ActionCallback::new(),
-            cap_provider: Box::new(cap_provider)
+            capabilities
         }
     }
 
@@ -130,12 +126,8 @@ impl TaskRunner {
     }
 
     pub fn start_action(&mut self, action: Box<dyn Action>, host: Gd<Node>) {
-        // TODO: can we pull capabilities on new task instead?
         // build context
-        let mut caps = Capabilities::default();
-        self.cap_provider.provide(&mut caps);
-        let mut context = ActionContext { host, caps };
-
+        let mut context = ActionContext { host, caps: &mut self.capabilities };
         action.start(&mut context, self.callback.clone());
     }
 }

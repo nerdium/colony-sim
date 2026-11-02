@@ -23,8 +23,8 @@ navigation_enabled = false
 [node name="StorageController" type="StorageController" parent="World" unique_id=854996870]
 position = Vector2(248, 408)
 
-[node name="NPC" type="NPC" parent="." unique_id=1178998458]
-has_item = true
+[node name="NPC" type="NPC" parent="." unique_id=1178998458 node_paths=PackedStringArray("world")]
+world = NodePath("../World")
 position = Vector2(144, 328)
 motion_mode = 1
 

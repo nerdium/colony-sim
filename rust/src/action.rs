@@ -16,7 +16,6 @@ impl ActionQueue {
 
 impl Task for ActionQueue {
     fn next(&mut self, prev: Option<ActionResult>) -> Option<Box<dyn Action>> {
-        godot_print!("next task please");
         match prev {
             Some(Err(err)) => godot_error!("ActionQueue failed: {}", err),
             _ => {}

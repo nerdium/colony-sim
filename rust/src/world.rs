@@ -1,5 +1,7 @@
 use godot::{classes::{INavigationRegion2D, NavigationMeshSourceGeometryData2D, NavigationPolygon, NavigationRegion2D, NavigationServer2D, TileMapLayer, navigation_polygon::ParsedGeometryType}, prelude::*};
 
+use crate::storage::{StorageController};
+
 #[derive(GodotClass)]
 #[class(base = NavigationRegion2D, init)]
 pub struct World {
@@ -11,6 +13,9 @@ pub struct World {
     #[export]
     agent_radius: f32,
     
+    #[init(node = "StorageController")]
+    pub storage_controller: OnReady<Gd<StorageController>>,
+
     dirty: bool
 }
 
@@ -19,6 +24,12 @@ impl INavigationRegion2D for World {
     fn ready(&mut self) {
         self.tilemap.set_navigation_enabled(false);
         self.rebake();
+
+        let storage_tile = Vector2i::new(0, 0);
+        let storage_pos = self.tile_to_world_pos(storage_tile);
+        self.storage_controller.bind_mut().add_storage(storage_pos, 8);
+
+        godot_print!("{:?}", self.storage_controller.bind().find_with_space());
     }
 
     fn process(&mut self, _dr: f64) {
@@ -30,6 +41,10 @@ impl INavigationRegion2D for World {
 }
 
 impl World {
+    pub fn tile_to_world_pos(&self, tile_pos: Vector2i) -> Vector2 {
+        self.tilemap.to_global(self.tilemap.map_to_local(tile_pos))
+    }
+
     pub fn mark_dirty(&mut self) {
         self.dirty = true;
     }
